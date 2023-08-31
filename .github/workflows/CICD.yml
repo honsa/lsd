@@ -6,7 +6,7 @@ env:
   PROJECT_NAME: lsd
   PROJECT_DESC: "An ls command with a lot of pretty colors."
   PROJECT_AUTH: "Peltoche <peltoche@halium.fr>"
-  RUST_MIN_SRV: "1.56.0"
+  RUST_MIN_SRV: "1.64.0"
 
 on: [push, pull_request]
 
@@ -37,7 +37,13 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: -- -D warnings
+        args: --tests -- -D warnings
+    - name: "`clap` deprecated checks"
+      if: success() || failure() # run regardless of prior step ("`fmt` testing") success/failure
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --features clap/deprecated
 
   min_version:
     name: MinSRV # Minimum supported rust version
@@ -69,6 +75,7 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , use-cross: use-cross }
           - { os: macos-latest   , target: x86_64-apple-darwin }
+          - { os: macos-latest   , target: aarch64-apple-darwin }
           - { os: windows-latest , target: i686-pc-windows-gnu }
           - { os: windows-latest , target: i686-pc-windows-msvc }
           - { os: windows-latest , target: x86_64-pc-windows-gnu }
@@ -195,6 +202,7 @@ jobs:
         command: build
         args: --release --target=${{ matrix.job.target }}
     - name: Test
+      if: matrix.job.target != 'aarch64-apple-darwin'
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}

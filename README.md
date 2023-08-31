@@ -8,30 +8,39 @@
 
 ![image](https://raw.githubusercontent.com/Peltoche/lsd/assets/screen_lsd.png)
 
-This project is a rewrite of GNU `ls` with lot of added features like colors, icons, tree-view, more formatting options etc.
+This project is a rewrite of GNU `ls` with lots of added features like colors, icons, tree-view, more formatting options etc.
 The project is heavily inspired by the super [colorls](https://github.com/athityakumar/colorls) project.
-
 
 ## Installation
 
-#### Prerequisites
+<details>
+<summary>Packaging status</summary>
+<a href="https://repology.org/project/lsd/versions">
+    <img src="https://repology.org/badge/vertical-allrepos/lsd.svg?columns=3" alt="Packaging status">
+</a>
+</details>
+
+### Prerequisites
 
 Install the patched fonts of powerline nerd-font and/or font-awesome. Have a look at the [Nerd Font README](https://github.com/ryanoasis/nerd-fonts/blob/master/readme.md) for more installation instructions. Don't forget to setup your terminal in order to use the correct font.
 
-| OS/Distro                       | Command                                                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Archlinux                       | `pacman -S lsd`                                                                                                   |
-| Fedora                          | `dnf install lsd`                                                                                                 |
-| Gentoo                          | `sudo emerge sys-apps/lsd`                                                                                        |
-| macOS                           | `brew install lsd` or `sudo port install lsd`                                                                     |
-| NixOS                           | `nix-env -iA nixos.lsd`                                                                                           |
-| FreeBSD                         | `pkg install lsd`                                                                                                 |
-| NetBSD or any `pkgsrc` platform | `pkgin install lsd` or `cd /usr/pkgsrc/sysutils/lsd && make install`                                              |
-| Windows                         | `scoop install lsd`                                                                                               |
-| Android (via Termux)            | `pkg install lsd`                                                                                                 |
-| Ubuntu/Debian based distro      | `sudo dpkg -i lsd_0.21.0_amd64.deb` get `.deb` file from [release page](https://github.com/Peltoche/lsd/releases) |
-| Solus                           | `eopkg it lsd`                                                                                                    |
-
+| OS/Distro                       | Command                                                              |
+|---------------------------------|----------------------------------------------------------------------|
+| Archlinux                       | `pacman -S lsd`                                                      |
+| Fedora                          | `dnf install lsd`                                                    |
+| Gentoo                          | `sudo emerge sys-apps/lsd`                                           |
+| macOS                           | `brew install lsd` or `sudo port install lsd`                        |
+| NixOS                           | `nix-env -iA nixos.lsd`                                              |
+| FreeBSD                         | `pkg install lsd`                                                    |
+| NetBSD or any `pkgsrc` platform | `pkgin install lsd` or `cd /usr/pkgsrc/sysutils/lsd && make install` |
+| Windows                         | `scoop install lsd`                                                  |
+| Android (via Termux)            | `pkg install lsd`                                                    |
+| Debian sid and bookworm         | `apt install lsd`                                                    |
+| Ubuntu 23.04 (Lunar Lobster)    | `apt install lsd`                                                    |
+| Earlier Ubuntu/Debian versions  | **snap discontinued**, use [From Binaries](#from-binaries)           |
+| Solus                           | `eopkg it lsd`                                                       |
+| Void Linux                      | `sudo xbps-install lsd`                                              |
+| openSUSE                        | `sudo zypper install lsd`                                            |
 
 ### From source
 
@@ -49,7 +58,7 @@ cargo install --git https://github.com/Peltoche/lsd.git --branch master
 
 ### From Binaries
 
-The [release page](https://github.com/Peltoche/lsd/releases) includes precompiled binaries for Linux, macOS and Windows for every release. You can also get the latest binary of `master` branch from the [Github action build artifacts](https://github.com/Peltoche/lsd/actions?query=branch%3Amaster+is%3Asuccess+event%3Apush) (choose the top action and scroll down to the artifacts section).
+The [release page](https://github.com/Peltoche/lsd/releases) includes precompiled binaries for Linux, macOS and Windows for every release. You can also get the latest binary of `master` branch from the [GitHub action build artifacts](https://github.com/Peltoche/lsd/actions?query=branch%3Amaster+is%3Asuccess+event%3Apush) (choose the top action and scroll down to the artifacts section).
 
 ## Configuration
 
@@ -58,7 +67,7 @@ Check [Config file content](#config-file-content) for details.
 
 ### Config file location
 
-#### Non-Windows
+### Non-Windows
 
 On non-Windows systems `lsd` follows the
 [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
@@ -68,20 +77,20 @@ called `config.yaml`.
 For most people it should be enough to put their config file at
 `~/.config/lsd/config.yaml`.
 
-#### Windows
+### Windows
 
 On Windows systems `lsd` only looks for the `config.yaml` files in one location:
 `%APPDATA%\lsd\`
 
-#### Custom
+### Custom
 
 You can also provide a configuration file from a non standard location:
 `lsd --config-file [PATH]`
 
 ### Config file content
 
-This is an example config file with the default values and some additional
-remarks.
+<details open>
+<summary>This is an example config file with the default values and some additional remarks.</summary>
 
 ```yaml
 # == Classic ==
@@ -94,7 +103,7 @@ classic: false
 # == Blocks ==
 # This specifies the columns and their order when using the long and the tree
 # layout.
-# Possible values: permission, user, group, size, size_value, date, name, inode
+# Possible values: permission, user, group, context, size, date, name, inode, links, git
 blocks:
   - permission
   - user
@@ -112,15 +121,13 @@ color:
   when: auto
   # How to colorize the output.
   # When "classic" is set, this is set to "no-color".
-  # Possible values: default, <theme-file-name>
-  # when specifying <theme-file-name>, lsd will look up theme file
-  # XDG Base Directory if relative, e.g. ~/.config/lsd/themes/<theme-file-name>.yaml,
-  # The file path if absolute
+  # Possible values: default, custom
+  # When "custom" is set, lsd will look in the config directory for `colors.yaml`.
   theme: default
 
 # == Date ==
 # This specifies the date format for the date column. The freeform format
-# accepts an strftime like string.
+# accepts a strftime like string.
 # When "classic" is set, this is set to "date".
 # Possible values: date, relative, '+<date_format>'
 # `date_format` will be a `strftime` formatted value. e.g. `date: '+%d %b %y %X'` will give you a date like this: 17 Jun 21 20:14:55
@@ -208,7 +215,7 @@ no-symlink: false
 total-size: false
 
 # == Hyperlink ==
-# Whether to display the total size of directories.
+# Attach hyperlink to filenames
 # Possible values: always, auto, never
 hyperlink: never
 
@@ -222,25 +229,33 @@ symlink-arrow: ⇒
 header: false
 ```
 
+</details>
+
 ## Theme
 
-`lsd` can be configured with a theme file to set the colors.
+`lsd` can be configured with theme files to set the colors or icons.
 
-Theme can be configured in the [configuration file](#configuration)(color.theme),
+### Color Theme
+
+Color theme can be configured in the [configuration file](#configuration)(color.theme),
 The valid theme configurations are:
 
 - `default`: the default color scheme shipped in `lsd`
-- theme-file-name(yaml): use the theme file to specify colors(without the `yaml` extension)
+- `custom`: use a custom color scheme defined in `colors.yaml`
+- *(deprecated) theme_file_name(yaml): use the theme file to specify colors(without the `yaml` extension)*
 
-when configured with the `theme-file-name` which is a `yaml` file,
+When set to `custom`, `lsd` will look for `colors.yaml` in the
+XDG Base Directory, e.g. ~/.config/lsd/colors.yaml
+
+When configured with the `theme-file-name` which is a `yaml` file,
 `lsd` will look up the theme file in the following way:
 
-- relative name: check the themes under XDG Base Directory, e.g. ~/.config/lsd/themes/<theme-file-name>.yaml
+- relative name: check the XDG Base Directory, e.g. ~/.config/lsd/themes/<theme-file-name>.yaml
 - absolute name: use the file path and name to find theme file
 
-Check [Theme file content](#theme-file-content) for details.
+Check [Color Theme file content](#color-theme-file-content) for details.
 
-### Theme file content
+#### Color Theme file content
 
 Theme file use the [crossterm](https://crates.io/crates/crossterm)
 to configure the colors, check [crossterm](https://docs.rs/crossterm/0.20.0/crossterm/style/enum.Color.html)
@@ -280,6 +295,17 @@ links:
   valid: 13
   invalid: 245
 tree-edge: 245
+git-status:
+  default: 245
+  unmodified: 245
+  ignored: 245
+  new-in-index: dark_green
+  new-in-workdir: dark_green
+  typechange: dark_yellow
+  deleted: dark_red
+  renamed: dark_green
+  modified: dark_yellow
+  conflicted: dark_red
 ```
 
 When creating a theme for `lsd`, you can specify any part of the default theme,
@@ -288,15 +314,58 @@ and then change its colors, the items missed would fallback to use the default c
 Please also notice that an empty theme is **NOT** supported due to
 [a bug in serde lib](https://github.com/dtolnay/serde-yaml/issues/86).
 
+### Icon Theme
+
+> **NOTE:** This feature is not available in a release yet. You can
+> get this feature by [building from
+> `master`](https://github.com/Peltoche/lsd#from-source).
+
+Icon theme can be configured in a fixed location, `$XDG_CONFIG_DIR/lsd/icons.yaml`,
+for example, `~/.config/lsd/icons.yaml` on macOS,
+please check [Config file location](#config-file-location) to make sure where is `$XDG_CONFIG_DIR`.
+
+As the file name indicated, the icon theme file is a `yaml` file.
+
+Check [Icon Theme file content](#icon-theme-file-content) for details.
+
+#### Icon Theme file content
+
+`lsd` support 3 kinds of icon overrides, by `name`, by `filetype` and by `extension`.
+The final set of icons used will be a combination of what is shipped with in `lsd` with overrides from config applied on top of it.
+*You can find the default set of icons [here](src/theme/icon.rs).*
+
+Both nerd font glyphs and unicode emojis can be used for icons. You can find an example of icons customization below.
+
+```yaml
+name:
+  .trash: 
+  .cargo: 
+  .emacs.d: 
+  a.out: 
+extension:
+  go: 
+  hs: 
+  rs: 🦀
+filetype:
+  dir: 📂
+  file: 📄
+  pipe: 📩
+  socket: 󰆨
+  executable: 
+  symlink-dir: 
+  symlink-file: 
+  device-char: 
+  device-block: 󰜫
+  special: 
+```
+
 ## External Configurations
 
 ### Required
 
-Enable nerd fonts for your terminal, URxvt for example:
+Enable nerd fonts for your terminal, URxvt for example in `.Xresources`:
 
-.Xresources
-
-```
+```sh
 URxvt*font:    xft:Hack Nerd Font:style=Regular:size=11
 ```
 
@@ -355,12 +424,13 @@ The default colors are:
 _Checkout [trapd00r/LS_COLORS](https://github.com/trapd00r/LS_COLORS) and [sharkdp/vivid](https://github.com/sharkdp/vivid) for help in themeing using `LS_COLORS`._
 
 ### First char of folder/file getting trimmed
+
 Workaround for Konsole: ㅤEdit the config file (or [create it](#config-file-location) if it doesn't already exist) and paste the following into it (contains invisible unicode characters):
-  ```yml
+
+```yml
 icons:
     separator: " ㅤ"
 ```
-
 
 This is a known issue in a few terminal emulator. Try using a different terminal emulator like. [Alacritty](https://github.com/alacritty/alacritty) and [Kitty](https://github.com/kovidgoyal/kitty) are really good alternatives. You might also want to check if your font is responsible for causing this.
 To verify this, try running lsd with icons disabled and if it still does not have the first character, then this is an lsd bug:
@@ -372,6 +442,12 @@ lsd --icon never --ignore-config
 ### UTF-8 Chars
 
 `lsd` will try to display the UTF-8 chars in file name, A `U+FFFD REPLACEMENT CHARACTER`(�) is used to represent the invalid UTF-8 chars.
+
+### Icons are showing up strangely
+
+Nerd Fonts is moving the codepoints of the Material Design Icons in 3.0, so lsd has updated the icons in #830. If your icons look weird, use fonts that have been patched using Nerd Fonts v2.3.0 or later.
+
+See also: <https://github.com/ryanoasis/nerd-fonts/releases/tag/v2.3.3>
 
 ## Contributors
 

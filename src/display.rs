@@ -1,5 +1,7 @@
 use crate::color::{Colors, Elem};
-use crate::flags::{Block, Display, Flags, HyperlinkOption, Layout};
+use crate::flags::blocks::Block;
+use crate::flags::{Display, Flags, HyperlinkOption, Layout};
+use crate::git_theme::GitTheme;
 use crate::icon::Icons;
 use crate::meta::name::DisplayOption;
 use crate::meta::{FileType, Meta};
@@ -13,7 +15,13 @@ const LINE: &str = "\u{2502}  "; // "│  "
 const CORNER: &str = "\u{2514}\u{2500}\u{2500}"; // "└──"
 const BLANK: &str = "   ";
 
-pub fn grid(metas: &[Meta], flags: &Flags, colors: &Colors, icons: &Icons) -> String {
+pub fn grid(
+    metas: &[Meta],
+    flags: &Flags,
+    colors: &Colors,
+    icons: &Icons,
+    git_theme: &GitTheme,
+) -> String {
     let term_width = terminal_size().map(|(w, _)| w.0 as usize);
 
     inner_display_grid(
@@ -22,12 +30,19 @@ pub fn grid(metas: &[Meta], flags: &Flags, colors: &Colors, icons: &Icons) -> St
         flags,
         colors,
         icons,
+        git_theme,
         0,
         term_width,
     )
 }
 
-pub fn tree(metas: &[Meta], flags: &Flags, colors: &Colors, icons: &Icons) -> String {
+pub fn tree(
+    metas: &[Meta],
+    flags: &Flags,
+    colors: &Colors,
+    icons: &Icons,
+    git_theme: &GitTheme,
+) -> String {
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(1),
         direction: Direction::LeftToRight,
@@ -36,25 +51,36 @@ pub fn tree(metas: &[Meta], flags: &Flags, colors: &Colors, icons: &Icons) -> St
     let padding_rules = get_padding_rules(metas, flags);
     let mut index = 0;
     for (i, block) in flags.blocks.0.iter().enumerate() {
-        if let Block::Name = block {
+        if block == &Block::Name {
             index = i;
             break;
         }
     }
 
-    for cell in inner_display_tree(metas, flags, colors, icons, (0, ""), &padding_rules, index) {
+    for cell in inner_display_tree(
+        metas,
+        flags,
+        colors,
+        icons,
+        git_theme,
+        (0, ""),
+        &padding_rules,
+        index,
+    ) {
         grid.add(cell);
     }
 
     grid.fit_into_columns(flags.blocks.0.len()).to_string()
 }
 
+#[allow(clippy::too_many_arguments)] // should wrap flags, colors, icons, git_theme into one struct
 fn inner_display_grid(
     display_option: &DisplayOption,
     metas: &[Meta],
     flags: &Flags,
     colors: &Colors,
     icons: &Icons,
+    git_theme: &GitTheme,
     depth: usize,
     term_width: Option<usize>,
 ) -> String {
@@ -93,6 +119,7 @@ fn inner_display_grid(
             meta,
             colors,
             icons,
+            git_theme,
             flags,
             display_option,
             &padding_rules,
@@ -100,14 +127,9 @@ fn inner_display_grid(
         );
 
         for block in blocks {
-            let block_str = block.to_string();
-
             cells.push(Cell {
-                width: get_visible_width(
-                    &block_str,
-                    matches!(flags.hyperlink, HyperlinkOption::Always),
-                ),
-                contents: block_str,
+                width: get_visible_width(&block, flags.hyperlink == HyperlinkOption::Always),
+                contents: block,
             });
         }
     }
@@ -142,7 +164,7 @@ fn inner_display_grid(
 
     // print the folder content
     for meta in metas {
-        if meta.content.is_some() {
+        if let Some(content) = &meta.content {
             if should_display_folder_path {
                 output += &display_folder_path(meta);
             }
@@ -153,10 +175,11 @@ fn inner_display_grid(
 
             output += &inner_display_grid(
                 &display_option,
-                meta.content.as_ref().unwrap(),
+                content,
                 flags,
                 colors,
                 icons,
+                git_theme,
                 depth + 1,
                 term_width,
             );
@@ -173,12 +196,7 @@ fn add_header(flags: &Flags, cells: &[Cell], grid: &mut Grid) {
         .blocks
         .0
         .iter()
-        .map(|b| {
-            get_visible_width(
-                &b.get_header(),
-                matches!(flags.hyperlink, HyperlinkOption::Always),
-            )
-        })
+        .map(|b| get_visible_width(b.get_header(), flags.hyperlink == HyperlinkOption::Always))
         .collect::<Vec<usize>>();
 
     // find max widths of each column
@@ -202,11 +220,13 @@ fn add_header(flags: &Flags, cells: &[Cell], grid: &mut Grid) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn inner_display_tree(
     metas: &[Meta],
     flags: &Flags,
     colors: &Colors,
     icons: &Icons,
+    git_theme: &GitTheme,
     tree_depth_prefix: (usize, &str),
     padding_rules: &HashMap<Block, usize>,
     tree_index: usize,
@@ -230,23 +250,19 @@ fn inner_display_tree(
             meta,
             colors,
             icons,
+            git_theme,
             flags,
             &DisplayOption::FileName,
             padding_rules,
             (tree_index, &current_prefix),
         ) {
-            let block_str = block.to_string();
-
             cells.push(Cell {
-                width: get_visible_width(
-                    &block_str,
-                    matches!(flags.hyperlink, HyperlinkOption::Always),
-                ),
-                contents: block_str,
+                width: get_visible_width(&block, flags.hyperlink == HyperlinkOption::Always),
+                contents: block,
             });
         }
 
-        if meta.content.is_some() {
+        if let Some(content) = &meta.content {
             let new_prefix = if tree_depth_prefix.0 > 0 {
                 if idx + 1 != last_idx {
                     // is last folder elem
@@ -259,10 +275,11 @@ fn inner_display_tree(
             };
 
             cells.extend(inner_display_tree(
-                meta.content.as_ref().unwrap(),
+                content,
                 flags,
                 colors,
                 icons,
+                git_theme,
                 (tree_depth_prefix.0 + 1, &new_prefix),
                 padding_rules,
                 tree_index,
@@ -291,62 +308,101 @@ fn should_display_folder_path(depth: usize, metas: &[Meta], flags: &Flags) -> bo
 }
 
 fn display_folder_path(meta: &Meta) -> String {
-    let mut output = String::new();
-    output.push('\n');
-    output += &meta.path.to_string_lossy();
-    output += ":\n";
-
-    output
+    format!("\n{}:\n", meta.path.to_string_lossy())
 }
 
-fn get_output<'a>(
-    meta: &'a Meta,
-    colors: &'a Colors,
-    icons: &'a Icons,
-    flags: &'a Flags,
+#[allow(clippy::too_many_arguments)]
+fn get_output(
+    meta: &Meta,
+    colors: &Colors,
+    icons: &Icons,
+    git_theme: &GitTheme,
+    flags: &Flags,
     display_option: &DisplayOption,
     padding_rules: &HashMap<Block, usize>,
-    tree: (usize, &'a str),
+    tree: (usize, &str),
 ) -> Vec<String> {
     let mut strings: Vec<String> = Vec::new();
+    let colorize_missing = |string: &str| colors.colorize(string, &Elem::NoAccess);
+
     for (i, block) in flags.blocks.0.iter().enumerate() {
         let mut block_vec = if Layout::Tree == flags.layout && tree.0 == i {
-            vec![colors.colorize(tree.1.to_string(), &Elem::TreeEdge)]
+            vec![colors.colorize(tree.1, &Elem::TreeEdge)]
         } else {
             Vec::new()
         };
 
         match block {
-            Block::INode => block_vec.push(meta.inode.render(colors)),
-            Block::Links => block_vec.push(meta.links.render(colors)),
+            Block::INode => block_vec.push(match &meta.inode {
+                Some(inode) => inode.render(colors),
+                None => colorize_missing("?"),
+            }),
+            Block::Links => block_vec.push(match &meta.links {
+                Some(links) => links.render(colors),
+                None => colorize_missing("?"),
+            }),
             Block::Permission => {
-                block_vec.extend(vec![
+                block_vec.extend([
                     meta.file_type.render(colors),
-                    meta.permissions.render(colors, flags),
-                    meta.access_control.render_method(colors),
+                    match meta.permissions {
+                        Some(permissions) => permissions.render(colors, flags),
+                        None => colorize_missing("?????????"),
+                    },
+                    match &meta.access_control {
+                        Some(access_control) => access_control.render_method(colors),
+                        None => colorize_missing(""),
+                    },
                 ]);
             }
-            Block::User => block_vec.push(meta.owner.render_user(colors)),
-            Block::Group => block_vec.push(meta.owner.render_group(colors)),
-            Block::Context => block_vec.push(meta.access_control.render_context(colors)),
+            Block::User => block_vec.push(match &meta.owner {
+                Some(owner) => owner.render_user(colors),
+                None => colorize_missing("?"),
+            }),
+            Block::Group => block_vec.push(match &meta.owner {
+                Some(owner) => owner.render_group(colors),
+                None => colorize_missing("?"),
+            }),
+            Block::Context => block_vec.push(match &meta.access_control {
+                Some(access_control) => access_control.render_context(colors),
+                None => colorize_missing("?"),
+            }),
             Block::Size => {
                 let pad = if Layout::Tree == flags.layout && 0 == tree.0 && 0 == i {
                     None
                 } else {
                     Some(padding_rules[&Block::SizeValue])
                 };
-                block_vec.push(meta.size.render(colors, flags, pad))
+                block_vec.push(match &meta.size {
+                    Some(size) => size.render(colors, flags, pad),
+                    None => colorize_missing("?"),
+                })
             }
-            Block::SizeValue => block_vec.push(meta.size.render_value(colors, flags)),
-            Block::Date => block_vec.push(meta.date.render(colors, flags)),
+            Block::SizeValue => block_vec.push(match &meta.size {
+                Some(size) => size.render_value(colors, flags),
+                None => colorize_missing("?"),
+            }),
+            Block::Date => block_vec.push(match &meta.date {
+                Some(date) => date.render(colors, flags),
+                None => colorize_missing("?"),
+            }),
             Block::Name => {
-                block_vec.extend(vec![
-                    meta.name
-                        .render(colors, icons, display_option, flags.hyperlink),
+                block_vec.extend([
+                    meta.name.render(
+                        colors,
+                        icons,
+                        display_option,
+                        flags.hyperlink,
+                        flags.should_quote,
+                    ),
                     meta.indicator.render(flags),
                 ]);
                 if !(flags.no_symlink.0 || flags.dereference.0 || flags.layout == Layout::Grid) {
                     block_vec.push(meta.symlink.render(colors, flags))
+                }
+            }
+            Block::GitStatus => {
+                if let Some(_s) = &meta.git_status {
+                    block_vec.push(_s.render(colors, git_theme));
                 }
             }
         };
@@ -392,7 +448,10 @@ fn detect_size_lengths(metas: &[Meta], flags: &Flags) -> usize {
     let mut max_value_length: usize = 0;
 
     for meta in metas {
-        let value_len = meta.size.value_string(flags).len();
+        let value_len = match &meta.size {
+            Some(size) => size.value_string(flags).len(),
+            None => 0,
+        };
 
         if value_len > max_value_length {
             max_value_length = value_len;
@@ -426,30 +485,33 @@ fn get_padding_rules(metas: &[Meta], flags: &Flags) -> HashMap<Block, usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::Cli;
     use crate::color;
     use crate::color::Colors;
-    use crate::flags::HyperlinkOption;
+    use crate::flags::{HyperlinkOption, IconOption, IconTheme as FlagTheme};
     use crate::icon::Icons;
     use crate::meta::{FileType, Name};
     use crate::Config;
-    use crate::{app, flags, icon, sort};
+    use crate::{flags, sort};
     use assert_fs::prelude::*;
+    use clap::Parser;
     use std::path::Path;
+    use tempfile::tempdir;
 
     #[test]
     fn test_display_get_visible_width_without_icons() {
-        for (s, l) in &[
+        for (s, l) in [
             ("Ｈｅｌｌｏ,ｗｏｒｌｄ!", 22),
             ("ASCII1234-_", 11),
             ("制作样本。", 10),
             ("日本語", 6),
-            ("샘플은 무료로 드리겠습니다", 26),
+            ("샘플은 무료로 드리겠습니다", 28),
             ("👩🐩", 4),
             ("🔬", 2),
         ] {
             let path = Path::new(s);
             let name = Name::new(
-                &path,
+                path,
                 FileType::File {
                     exec: false,
                     uid: false,
@@ -458,32 +520,33 @@ mod tests {
             let output = name
                 .render(
                     &Colors::new(color::ThemeOption::NoColor),
-                    &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+                    &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
                     &DisplayOption::FileName,
                     HyperlinkOption::Never,
+                    true,
                 )
                 .to_string();
 
-            assert_eq!(get_visible_width(&output, false), *l);
+            assert_eq!(get_visible_width(&output, false), l);
         }
     }
 
     #[test]
     fn test_display_get_visible_width_with_icons() {
-        for (s, l) in &[
+        for (s, l) in [
             // Add 3 characters for the icons.
             ("Ｈｅｌｌｏ,ｗｏｒｌｄ!", 24),
             ("ASCII1234-_", 13),
-            ("File with space", 17),
+            ("File with space", 19),
             ("制作样本。", 12),
             ("日本語", 8),
-            ("샘플은 무료로 드리겠습니다", 28),
+            ("샘플은 무료로 드리겠습니다", 30),
             ("👩🐩", 6),
             ("🔬", 4),
         ] {
             let path = Path::new(s);
             let name = Name::new(
-                &path,
+                path,
                 FileType::File {
                     exec: false,
                     uid: false,
@@ -492,31 +555,32 @@ mod tests {
             let output = name
                 .render(
                     &Colors::new(color::ThemeOption::NoColor),
-                    &Icons::new(icon::Theme::Fancy, " ".to_string()),
+                    &Icons::new(false, IconOption::Always, FlagTheme::Fancy, " ".to_string()),
                     &DisplayOption::FileName,
                     HyperlinkOption::Never,
+                    true,
                 )
                 .to_string();
 
-            assert_eq!(get_visible_width(&output, false), *l);
+            assert_eq!(get_visible_width(&output, false), l);
         }
     }
 
     #[test]
     fn test_display_get_visible_width_with_colors() {
-        for (s, l) in &[
+        for (s, l) in [
             ("Ｈｅｌｌｏ,ｗｏｒｌｄ!", 22),
             ("ASCII1234-_", 11),
-            ("File with space", 15),
+            ("File with space", 17),
             ("制作样本。", 10),
             ("日本語", 6),
-            ("샘플은 무료로 드리겠습니다", 26),
+            ("샘플은 무료로 드리겠습니다", 28),
             ("👩🐩", 4),
             ("🔬", 2),
         ] {
             let path = Path::new(s);
             let name = Name::new(
-                &path,
+                path,
                 FileType::File {
                     exec: false,
                     uid: false,
@@ -525,40 +589,39 @@ mod tests {
             let output = name
                 .render(
                     &Colors::new(color::ThemeOption::NoLscolors),
-                    &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+                    &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
                     &DisplayOption::FileName,
                     HyperlinkOption::Never,
+                    true,
                 )
                 .to_string();
 
             // check if the color is present.
-            assert_eq!(
-                true,
+            assert!(
                 output.starts_with("\u{1b}[38;5;"),
-                "{:?} should start with color",
-                output,
+                "{output:?} should start with color"
             );
-            assert_eq!(true, output.ends_with("[39m"), "reset foreground color");
+            assert!(output.ends_with("[39m"), "reset foreground color");
 
-            assert_eq!(get_visible_width(&output, false), *l, "visible match");
+            assert_eq!(get_visible_width(&output, false), l, "visible match");
         }
     }
 
     #[test]
     fn test_display_get_visible_width_without_colors() {
-        for (s, l) in &[
+        for (s, l) in [
             ("Ｈｅｌｌｏ,ｗｏｒｌｄ!", 22),
             ("ASCII1234-_", 11),
-            ("File with space", 15),
+            ("File with space", 17),
             ("制作样本。", 10),
             ("日本語", 6),
-            ("샘플은 무료로 드리겠습니다", 26),
+            ("샘플은 무료로 드리겠습니다", 28),
             ("👩🐩", 4),
             ("🔬", 2),
         ] {
             let path = Path::new(s);
             let name = Name::new(
-                &path,
+                path,
                 FileType::File {
                     exec: false,
                     uid: false,
@@ -567,23 +630,24 @@ mod tests {
             let output = name
                 .render(
                     &Colors::new(color::ThemeOption::NoColor),
-                    &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+                    &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
                     &DisplayOption::FileName,
                     HyperlinkOption::Never,
+                    true,
                 )
                 .to_string();
 
             // check if the color is present.
-            assert_eq!(false, output.starts_with("\u{1b}[38;5;"));
-            assert_eq!(false, output.ends_with("[0m"));
+            assert!(!output.starts_with("\u{1b}[38;5;"));
+            assert!(!output.ends_with("[0m"));
 
-            assert_eq!(get_visible_width(&output, false), *l);
+            assert_eq!(get_visible_width(&output, false), l);
         }
     }
 
     #[test]
     fn test_display_get_visible_width_hypelink_simple() {
-        for (s, l) in &[
+        for (s, l) in [
             ("Ｈｅｌｌｏ,ｗｏｒｌｄ!", 22),
             ("ASCII1234-_", 11),
             ("File with space", 15),
@@ -595,7 +659,7 @@ mod tests {
         ] {
             // rending name require actual file, so we are mocking that
             let output = format!("\x1B]8;;{}\x1B\x5C{}\x1B]8;;\x1B\x5C", "url://fake-url", s);
-            assert_eq!(get_visible_width(&output, true), *l);
+            assert_eq!(get_visible_width(&output, true), l);
         }
     }
 
@@ -611,9 +675,9 @@ mod tests {
 
     #[test]
     fn test_display_tree_with_all() {
-        let argv = vec!["lsd", "--tree", "--all"];
-        let matches = app::build().get_matches_from_safe(argv).unwrap();
-        let flags = Flags::configure_from(&matches, &Config::with_none()).unwrap();
+        let argv = ["lsd", "--tree", "--all"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("one.d").create_dir_all().unwrap();
@@ -621,15 +685,17 @@ mod tests {
         dir.child("one.d/.hidden").touch().unwrap();
         let mut metas = Meta::from_path(Path::new(dir.path()), false)
             .unwrap()
-            .recurse_into(42, &flags)
+            .recurse_into(42, &flags, None)
             .unwrap()
+            .0
             .unwrap();
         sort(&mut metas, &sort::assemble_sorters(&flags));
         let output = tree(
             &metas,
             &flags,
             &Colors::new(color::ThemeOption::NoColor),
-            &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
         );
 
         assert_eq!("one.d\n├── .hidden\n└── two\n", output);
@@ -643,23 +709,25 @@ mod tests {
     /// `---blocks size,name` can help us for this case
     #[test]
     fn test_tree_align_subfolder() {
-        let argv = vec!["lsd", "--tree", "--blocks", "size,name"];
-        let matches = app::build().get_matches_from_safe(argv).unwrap();
-        let flags = Flags::configure_from(&matches, &Config::with_none()).unwrap();
+        let argv = ["lsd", "--tree", "--blocks", "size,name"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("dir").create_dir_all().unwrap();
         dir.child("dir/file").touch().unwrap();
         let metas = Meta::from_path(Path::new(dir.path()), false)
             .unwrap()
-            .recurse_into(42, &flags)
+            .recurse_into(42, &flags, None)
             .unwrap()
+            .0
             .unwrap();
         let output = tree(
             &metas,
             &flags,
             &Colors::new(color::ThemeOption::NoColor),
-            &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
         );
 
         let length_before_b = |i| -> usize {
@@ -668,44 +736,46 @@ mod tests {
                 .nth(i)
                 .unwrap()
                 .split(|c| c == 'K' || c == 'B')
-                .nth(0)
+                .next()
                 .unwrap()
                 .len()
         };
         assert_eq!(length_before_b(0), length_before_b(1));
         assert_eq!(
-            output.lines().nth(0).unwrap().find("d"),
-            output.lines().nth(1).unwrap().find("└")
+            output.lines().next().unwrap().find('d'),
+            output.lines().nth(1).unwrap().find('└')
         );
     }
 
     #[test]
     #[cfg(unix)]
     fn test_tree_size_first_without_name() {
-        let argv = vec!["lsd", "--tree", "--blocks", "size,permission"];
-        let matches = app::build().get_matches_from_safe(argv).unwrap();
-        let flags = Flags::configure_from(&matches, &Config::with_none()).unwrap();
+        let argv = ["lsd", "--tree", "--blocks", "size,permission"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("dir").create_dir_all().unwrap();
         dir.child("dir/file").touch().unwrap();
         let metas = Meta::from_path(Path::new(dir.path()), false)
             .unwrap()
-            .recurse_into(42, &flags)
+            .recurse_into(42, &flags, None)
             .unwrap()
+            .0
             .unwrap();
         let output = tree(
             &metas,
             &flags,
             &Colors::new(color::ThemeOption::NoColor),
-            &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
         );
 
-        assert_eq!(output.lines().nth(1).unwrap().chars().nth(0).unwrap(), '└');
+        assert_eq!(output.lines().nth(1).unwrap().chars().next().unwrap(), '└');
         assert_eq!(
             output
                 .lines()
-                .nth(0)
+                .next()
                 .unwrap()
                 .chars()
                 .position(|x| x == 'd'),
@@ -720,23 +790,25 @@ mod tests {
 
     #[test]
     fn test_tree_edge_before_name() {
-        let argv = vec!["lsd", "--tree", "--long"];
-        let matches = app::build().get_matches_from_safe(argv).unwrap();
-        let flags = Flags::configure_from(&matches, &Config::with_none()).unwrap();
+        let argv = ["lsd", "--tree", "--long"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("one.d").create_dir_all().unwrap();
         dir.child("one.d/two").touch().unwrap();
         let metas = Meta::from_path(Path::new(dir.path()), false)
             .unwrap()
-            .recurse_into(42, &flags)
+            .recurse_into(42, &flags, None)
             .unwrap()
+            .0
             .unwrap();
         let output = tree(
             &metas,
             &flags,
             &Colors::new(color::ThemeOption::NoColor),
-            &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
         );
 
         assert!(output.ends_with("└── two\n"));
@@ -744,28 +816,30 @@ mod tests {
 
     #[test]
     fn test_grid_all_block_headers() {
-        let argv = vec![
+        let argv = [
             "lsd",
             "--header",
             "--blocks",
             "permission,user,group,size,date,name,inode,links",
         ];
-        let matches = app::build().get_matches_from_safe(argv).unwrap();
-        let flags = Flags::configure_from(&matches, &Config::with_none()).unwrap();
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("testdir").create_dir_all().unwrap();
         dir.child("test").touch().unwrap();
         let metas = Meta::from_path(Path::new(dir.path()), false)
             .unwrap()
-            .recurse_into(1, &flags)
+            .recurse_into(1, &flags, None)
             .unwrap()
+            .0
             .unwrap();
         let output = grid(
             &metas,
             &flags,
             &Colors::new(color::ThemeOption::NoColor),
-            &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
         );
 
         dir.close().unwrap();
@@ -782,22 +856,24 @@ mod tests {
 
     #[test]
     fn test_grid_no_header_with_empty_meta() {
-        let argv = vec!["lsd", "--header", "-l"];
-        let matches = app::build().get_matches_from_safe(argv).unwrap();
-        let flags = Flags::configure_from(&matches, &Config::with_none()).unwrap();
+        let argv = ["lsd", "--header", "-l"];
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let flags = Flags::configure_from(&cli, &Config::with_none()).unwrap();
 
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("testdir").create_dir_all().unwrap();
         let metas = Meta::from_path(Path::new(dir.path()), false)
             .unwrap()
-            .recurse_into(1, &flags)
+            .recurse_into(1, &flags, None)
             .unwrap()
+            .0
             .unwrap();
         let output = grid(
             &metas,
             &flags,
             &Colors::new(color::ThemeOption::NoColor),
-            &Icons::new(icon::Theme::NoIcon, " ".to_string()),
+            &Icons::new(false, IconOption::Never, FlagTheme::Fancy, " ".to_string()),
+            &GitTheme::new(),
         );
 
         dir.close().unwrap();
@@ -808,5 +884,116 @@ mod tests {
         assert!(!output.contains("Size"));
         assert!(!output.contains("Date Modified"));
         assert!(!output.contains("Name"));
+    }
+
+    #[test]
+    fn test_folder_path() {
+        let tmp_dir = tempdir().expect("failed to create temp dir");
+
+        let file_path = tmp_dir.path().join("file");
+        std::fs::File::create(&file_path).expect("failed to create the file");
+        let file = Meta::from_path(&file_path, false).unwrap();
+
+        let dir_path = tmp_dir.path().join("dir");
+        std::fs::create_dir(&dir_path).expect("failed to create the dir");
+        let dir = Meta::from_path(&dir_path, false).unwrap();
+
+        assert_eq!(
+            display_folder_path(&dir),
+            format!(
+                "\n{}{}dir:\n",
+                tmp_dir.path().to_string_lossy(),
+                std::path::MAIN_SEPARATOR
+            )
+        );
+
+        const YES: bool = true;
+        const NO: bool = false;
+
+        assert_eq!(
+            should_display_folder_path(0, &[file.clone()], &Flags::default()),
+            YES // doesn't matter since there is no folder
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[dir.clone()], &Flags::default()),
+            NO
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[file.clone(), dir.clone()], &Flags::default()),
+            YES
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[dir.clone(), dir.clone()], &Flags::default()),
+            YES
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[file.clone(), file.clone()], &Flags::default()),
+            YES // doesn't matter since there is no folder
+        );
+
+        drop(dir); // to avoid clippy complains about previous .clone()
+        drop(file);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_folder_path_with_links() {
+        let tmp_dir = tempdir().expect("failed to create temp dir");
+
+        let file_path = tmp_dir.path().join("file");
+        std::fs::File::create(&file_path).expect("failed to create the file");
+        let file = Meta::from_path(&file_path, false).unwrap();
+
+        let dir_path = tmp_dir.path().join("dir");
+        std::fs::create_dir(&dir_path).expect("failed to create the dir");
+        let dir = Meta::from_path(&dir_path, false).unwrap();
+
+        let link_path = tmp_dir.path().join("link");
+        std::os::unix::fs::symlink("dir", &link_path).unwrap();
+        let link = Meta::from_path(&link_path, false).unwrap();
+
+        let grid_flags = Flags {
+            layout: Layout::Grid,
+            ..Flags::default()
+        };
+
+        let oneline_flags = Flags {
+            layout: Layout::OneLine,
+            ..Flags::default()
+        };
+
+        const YES: bool = true;
+        const NO: bool = false;
+
+        assert_eq!(
+            should_display_folder_path(0, &[link.clone()], &grid_flags),
+            NO
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[link.clone()], &oneline_flags),
+            YES // doesn't matter since this link will be expanded as a directory
+        );
+
+        assert_eq!(
+            should_display_folder_path(0, &[file.clone(), link.clone()], &grid_flags),
+            YES
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[file.clone(), link.clone()], &oneline_flags),
+            YES // doesn't matter since this link will be expanded as a directory
+        );
+
+        assert_eq!(
+            should_display_folder_path(0, &[dir.clone(), link.clone()], &grid_flags),
+            YES
+        );
+        assert_eq!(
+            should_display_folder_path(0, &[dir.clone(), link.clone()], &oneline_flags),
+            YES
+        );
+
+        drop(dir); // to avoid clippy complains about previous .clone()
+        drop(file);
+        drop(link);
     }
 }

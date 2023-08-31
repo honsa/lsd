@@ -21,7 +21,7 @@ pub struct Permissions {
     pub setuid: bool,
 }
 
-impl<'a> From<&'a Metadata> for Permissions {
+impl From<&Metadata> for Permissions {
     #[cfg(unix)]
     fn from(meta: &Metadata) -> Self {
         use std::os::unix::fs::PermissionsExt;
@@ -62,68 +62,72 @@ impl Permissions {
     pub fn render(&self, colors: &Colors, flags: &Flags) -> ColoredString {
         let bit = |bit, chr: &'static str, elem: &Elem| {
             if bit {
-                colors.colorize(String::from(chr), elem)
+                colors.colorize(chr, elem)
             } else {
-                colors.colorize(String::from("-"), &Elem::NoAccess)
+                colors.colorize('-', &Elem::NoAccess)
             }
         };
 
-        let strings = match flags.permission {
-            PermissionFlag::Rwx => vec![
+        let res = match flags.permission {
+            PermissionFlag::Rwx => [
                 // User permissions
                 bit(self.user_read, "r", &Elem::Read),
                 bit(self.user_write, "w", &Elem::Write),
                 match (self.user_execute, self.setuid) {
-                    (false, false) => colors.colorize(String::from("-"), &Elem::NoAccess),
-                    (true, false) => colors.colorize(String::from("x"), &Elem::Exec),
-                    (false, true) => colors.colorize(String::from("S"), &Elem::ExecSticky),
-                    (true, true) => colors.colorize(String::from("s"), &Elem::ExecSticky),
+                    (false, false) => colors.colorize('-', &Elem::NoAccess),
+                    (true, false) => colors.colorize('x', &Elem::Exec),
+                    (false, true) => colors.colorize('S', &Elem::ExecSticky),
+                    (true, true) => colors.colorize('s', &Elem::ExecSticky),
                 },
                 // Group permissions
                 bit(self.group_read, "r", &Elem::Read),
                 bit(self.group_write, "w", &Elem::Write),
                 match (self.group_execute, self.setgid) {
-                    (false, false) => colors.colorize(String::from("-"), &Elem::NoAccess),
-                    (true, false) => colors.colorize(String::from("x"), &Elem::Exec),
-                    (false, true) => colors.colorize(String::from("S"), &Elem::ExecSticky),
-                    (true, true) => colors.colorize(String::from("s"), &Elem::ExecSticky),
+                    (false, false) => colors.colorize('-', &Elem::NoAccess),
+                    (true, false) => colors.colorize('x', &Elem::Exec),
+                    (false, true) => colors.colorize('S', &Elem::ExecSticky),
+                    (true, true) => colors.colorize('s', &Elem::ExecSticky),
                 },
                 // Other permissions
                 bit(self.other_read, "r", &Elem::Read),
                 bit(self.other_write, "w", &Elem::Write),
                 match (self.other_execute, self.sticky) {
-                    (false, false) => colors.colorize(String::from("-"), &Elem::NoAccess),
-                    (true, false) => colors.colorize(String::from("x"), &Elem::Exec),
-                    (false, true) => colors.colorize(String::from("T"), &Elem::ExecSticky),
-                    (true, true) => colors.colorize(String::from("t"), &Elem::ExecSticky),
+                    (false, false) => colors.colorize('-', &Elem::NoAccess),
+                    (true, false) => colors.colorize('x', &Elem::Exec),
+                    (false, true) => colors.colorize('T', &Elem::ExecSticky),
+                    (true, true) => colors.colorize('t', &Elem::ExecSticky),
                 },
-            ],
+            ]
+            .into_iter()
+            // From the experiment, the maximum string size is 153 bytes
+            .fold(String::with_capacity(160), |mut acc, x| {
+                acc.push_str(&x.to_string());
+                acc
+            }),
             PermissionFlag::Octal => {
-                let octal_sticky = Self::bits_to_octal(self.setuid, self.setgid, self.sticky);
-                let octal_user =
-                    Self::bits_to_octal(self.user_read, self.user_write, self.user_execute);
-                let octal_group =
-                    Self::bits_to_octal(self.group_read, self.group_write, self.group_execute);
-                let octal_other =
-                    Self::bits_to_octal(self.other_read, self.other_write, self.other_execute);
-                vec![colors.colorize(
-                    format!(
-                        "{}{}{}{}",
-                        octal_sticky, octal_user, octal_group, octal_other
-                    ),
-                    &Elem::Octal,
-                )]
+                let octals = [
+                    Self::bits_to_octal(self.setuid, self.setgid, self.sticky),
+                    Self::bits_to_octal(self.user_read, self.user_write, self.user_execute),
+                    Self::bits_to_octal(self.group_read, self.group_write, self.group_execute),
+                    Self::bits_to_octal(self.other_read, self.other_write, self.other_execute),
+                ]
+                .into_iter()
+                .fold(String::with_capacity(4), |mut acc, x| {
+                    acc.push(
+                        char::from_digit(x as u32, 8)
+                            .expect("octal value of permission should not be greater than 7"),
+                    );
+                    acc
+                });
+
+                colors.colorize(octals, &Elem::Octal).to_string()
             }
         };
 
-        let res = strings
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-            .join("");
         ColoredString::new(Colors::default_style(), res)
     }
 
+    #[cfg(not(windows))]
     pub fn is_executable(&self) -> bool {
         self.user_execute || self.group_execute || self.other_execute
     }
@@ -166,7 +170,7 @@ mod test {
     use tempfile::tempdir;
 
     #[test]
-    pub fn permission_rwx() {
+    fn permission_rwx() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
 
         // Create the file;
@@ -186,7 +190,7 @@ mod test {
     }
 
     #[test]
-    pub fn permission_rwx2() {
+    fn permission_rwx2() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
 
         // Create the file;
@@ -206,7 +210,7 @@ mod test {
     }
 
     #[test]
-    pub fn permission_rwx_sticky() {
+    fn permission_rwx_sticky() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
 
         // Create the file;
@@ -218,15 +222,17 @@ mod test {
         let meta = file_path.metadata().expect("failed to get meta");
 
         let colors = Colors::new(ThemeOption::NoColor);
-        let mut flags = Flags::default();
-        flags.permission = PermissionFlag::Rwx;
+        let flags = Flags {
+            permission: PermissionFlag::Rwx,
+            ..Default::default()
+        };
         let perms = Permissions::from(&meta);
 
         assert_eq!("rwxrwxrwt", perms.render(&colors, &flags).content());
     }
 
     #[test]
-    pub fn permission_octal() {
+    fn permission_octal() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
 
         // Create the file;
@@ -237,15 +243,17 @@ mod test {
         let meta = file_path.metadata().expect("failed to get meta");
 
         let colors = Colors::new(ThemeOption::NoColor);
-        let mut flags = Flags::default();
-        flags.permission = PermissionFlag::Octal;
+        let flags = Flags {
+            permission: PermissionFlag::Octal,
+            ..Default::default()
+        };
         let perms = Permissions::from(&meta);
 
         assert_eq!("0655", perms.render(&colors, &flags).content());
     }
 
     #[test]
-    pub fn permission_octal2() {
+    fn permission_octal2() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
 
         // Create the file;
@@ -256,15 +264,17 @@ mod test {
         let meta = file_path.metadata().expect("failed to get meta");
 
         let colors = Colors::new(ThemeOption::NoColor);
-        let mut flags = Flags::default();
-        flags.permission = PermissionFlag::Octal;
+        let flags = Flags {
+            permission: PermissionFlag::Octal,
+            ..Default::default()
+        };
         let perms = Permissions::from(&meta);
 
         assert_eq!("0777", perms.render(&colors, &flags).content());
     }
 
     #[test]
-    pub fn permission_octal_sticky() {
+    fn permission_octal_sticky() {
         let tmp_dir = tempdir().expect("failed to create temp dir");
 
         // Create the file;
@@ -276,8 +286,10 @@ mod test {
         let meta = file_path.metadata().expect("failed to get meta");
 
         let colors = Colors::new(ThemeOption::NoColor);
-        let mut flags = Flags::default();
-        flags.permission = PermissionFlag::Octal;
+        let flags = Flags {
+            permission: PermissionFlag::Octal,
+            ..Default::default()
+        };
         let perms = Permissions::from(&meta);
 
         assert_eq!("1777", perms.render(&colors, &flags).content());
